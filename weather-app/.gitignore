@@ -1,1 +1,150 @@
- 
+ ### Java ###
+# 컴파일된 클래스 파일
+*.class
+
+# 로그 파일
+*.log
+logs/
+
+# BlueJ 파일
+*.ctxt
+
+# Mobile Tools for Java (J2ME)
+.mtj.tmp/
+
+# 패키지 파일
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# 가상 머신 충돌 로그
+hs_err_pid*
+replay_pid*
+
+### Maven ###
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+### Gradle ###
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### STS/Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+*.code-workspace
+
+### 운영체제 관련 ###
+# Mac
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+### 애플리케이션 관련 ###
+# 환경 설정 파일 (보안 정보 포함)
+application-*.yml
+application-*.properties
+!application-example.yml
+!application-example.properties
+
+# 로컬 설정 파일
+*.local.*
+
+# 임시 파일
+*.tmp
+*.temp
+*.swp
+*~
+
+# 데이터베이스 파일
+*.db
+*.sqlite
+*.sqlite3
+
+# 락 파일
+*.lock
+.lock
+.lockb
+
+# 캐시 파일
+.cache/
+.caches/
+.cached/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 노드 모듈 (프론트엔드 관련)
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+.pnp/
+.pnp.js
+
+# 커버리지 리포트
+coverage/
+.coverage
+htmlcov/
+
+# 문서 생성 파일
+/docs/_build/
+/site
+
+# 배포 관련
+/dist/
+/build/
