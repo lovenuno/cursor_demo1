@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>날씨 정보</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+    <style>
+        body {
+            background-color: #f5f5f5;
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        .weather-card {
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s;
+            margin-bottom: 20px;
+        }
+        .weather-card:hover {
+            transform: translateY(-5px);
+        }
+        .card-header {
+            background-color: #4a6fa5;
+            color: white;
+            font-weight: bold;
+            padding: 15px;
+        }
+        .card-body {
+            padding: 20px;
+        }
+        .weather-icon {
+            width: 64px;
+            height: 64px;
+        }
+        .temperature {
+            font-size: 2.5rem;
+            font-weight: bold;
+        }
+        .weather-info {
+            margin-top: 10px;
+        }
+        .city-management {
+            background-color: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        /* 자동완성 스타일 */
+        .ui-autocomplete {
+            max-height: 200px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            z-index: 9999 !important;
+        }
+        .ui-menu-item {
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .ui-menu-item:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center mb-4">실시간 날씨 정보</h1>
+        
+        <!-- 도시 관리 섹션 -->
+        <div class="city-management mb-4">
+            <h3>도시 관리</h3>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="input-group mb-3">
+                        <input type="text" id="newCityInput" class="form-control" placeholder="도시 이름 (영문)">
+                        <button class="btn btn-primary" id="addCityBtn">도시 추가</button>
+                    </div>
+                </div>
+            </div>
+            
+            <h5 class="mt-3">현재 등록된 도시</h5>
+            <div class="row" id="cityList">
+                <div class="col-md-3 mb-2" th:each="city : ${cities}">
+                    <div class="card">
+                        <div class="card-body d-flex justify-content-between align-items-center">
+                            <span th:text="${city}">도시 이름</span>
+                            <button class="btn btn-sm btn-danger remove-city" th:data-city="${city}">삭제</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 날씨 정보 카드 -->
+        <div class="row" id="weatherCards">
+            <div class="col-md-4" th:each="weather : ${weatherDataList}">
+                <div class="card weather-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0" th:text="${weather.city}">도시 이름</h5>
+                        <small th:text="${#temporals.format(weather.updatedAt, 'yyyy-MM-dd HH:mm')}">업데이트 시간</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <img class="weather-icon" th:src="@{'https://cdn.weatherapi.com/weather/64x64/' + ${weather.weatherIcon}}" alt="날씨 아이콘">
+                            <div class="ms-3">
+                                <div class="temperature" th:text="${#numbers.formatDecimal(weather.temperature, 0, 1)} + '°C'">0°C</div>
+                                <div th:text="${weather.weatherDescription}">날씨 설명</div>
+                            </div>
+                        </div>
+                        <div class="weather-info">
+                            <div class="row">
+                                <div class="col-6">
+                                    <p><strong>습도:</strong> <span th:text="${weather.humidity} + '%'">0%</span></p>
+                                </div>
+                                <div class="col-6">
+                                    <p><strong>풍속:</strong> <span th:text="${weather.windSpeed} + ' m/s'">0 m/s</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 토스트 메시지 -->
+    <div class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true" id="successToast">
+        <div class="d-flex">
+            <div class="toast-body" id="successToastMessage">
+                도시가 성공적으로 추가되었습니다.
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+    
+    <div class="toast align-items-center text-white bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true" id="errorToast">
+        <div class="d-flex">
+            <div class="toast-body" id="errorToastMessage">
+                오류가 발생했습니다.
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const addCityBtn = document.getElementById('addCityBtn');
+            const newCityInput = document.getElementById('newCityInput');
+            const cityList = document.getElementById('cityList');
+            const weatherCards = document.getElementById('weatherCards');
+            const successToast = new bootstrap.Toast(document.getElementById('successToast'));
+            const errorToast = new bootstrap.Toast(document.getElementById('errorToast'));
+            const successToastMessage = document.getElementById('successToastMessage');
+            const errorToastMessage = document.getElementById('errorToastMessage');
+            
+            // 자동완성 기능 초기화
+            $(newCityInput).autocomplete({
+                source: function(request, response) {
+                    fetch(`/api/weather/cities/search?query=${request.term}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.length === 0) {
+                                // 검색 결과가 없을 때 "검색 결과 없음" 메시지 표시
+                                response([{ label: '검색 결과가 없습니다. 다른 도시를 입력해보세요.', value: '' }]);
+                            } else {
+                                // 결과 데이터 가공
+                                const formattedData = data.map(city => {
+                                    // 도시 이름에 쉼표가 있으면 도시와 국가로 분리
+                                    if (city.includes(',')) {
+                                        const parts = city.split(',');
+                                        const cityName = parts[0].trim();
+                                        const country = parts[1].trim();
+                                        return {
+                                            label: `${cityName}, ${country}`,
+                                            value: cityName, // 도시 이름만 저장
+                                            fullName: city
+                                        };
+                                    } else {
+                                        return {
+                                            label: city,
+                                            value: city,
+                                            fullName: city
+                                        };
+                                    }
+                                });
+                                response(formattedData);
+                            }
+                        })
+                        .catch(err => {
+                            console.error('자동완성 데이터 가져오기 오류:', err);
+                            response([]);
+                        });
+                },
+                minLength: 1,  // 최소 1글자 이상 입력해야 자동완성 시작
+                select: function(event, ui) {
+                    if (ui.item.value) {  // 실제 도시를 선택한 경우에만 값 설정
+                        newCityInput.value = ui.item.value;
+                        // 선택 후 바로 추가 버튼 활성화
+                        addCityBtn.focus();
+                    }
+                    return false;  // 기본 동작 방지
+                }
+            }).autocomplete("instance")._renderItem = function(ul, item) {
+                // 검색 결과가 없는 경우 스타일 변경
+                if (!item.value) {
+                    return $("<li>")
+                        .append("<div class='text-muted'>" + item.label + "</div>")
+                        .appendTo(ul);
+                }
+                
+                // 도시와 국가가 있는 경우 스타일 적용
+                if (item.label.includes(',')) {
+                    const parts = item.label.split(',');
+                    return $("<li>")
+                        .append("<div><strong>" + parts[0] + "</strong><small class='text-muted'>, " + parts[1] + "</small></div>")
+                        .appendTo(ul);
+                }
+                
+                // 일반 도시 항목
+                return $("<li>")
+                    .append("<div>" + item.label + "</div>")
+                    .appendTo(ul);
+            };
+            
+            // 도시 추가 버튼 클릭 이벤트
+            addCityBtn.addEventListener('click', function() {
+                const cityName = newCityInput.value.trim();
+                if (!cityName) {
+                    showError('도시 이름을 입력해주세요.');
+                    return;
+                }
+                
+                addCity(cityName);
+            });
+            
+            // 엔터 키로 도시 추가
+            newCityInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    addCityBtn.click();
+                }
+            });
+            
+            // 도시 삭제 버튼 이벤트 (이벤트 위임)
+            document.addEventListener('click', function(e) {
+                if (e.target.classList.contains('remove-city')) {
+                    const cityName = e.target.getAttribute('data-city');
+                    removeCity(cityName);
+                }
+            });
+            
+            // 도시 추가 함수
+            function addCity(cityName) {
+                fetch('/api/weather/cities', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ city: cityName })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showSuccess(data.message);
+                        newCityInput.value = '';
+                        // 페이지 새로고침
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1000);
+                    } else {
+                        showError(data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('도시 추가 중 오류가 발생했습니다.');
+                });
+            }
+            
+            // 도시 삭제 함수
+            function removeCity(cityName) {
+                if (!confirm(`정말로 ${cityName} 도시를 삭제하시겠습니까?`)) {
+                    return;
+                }
+                
+                fetch(`/api/weather/cities/${cityName}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showSuccess(data.message);
+                        // 페이지 새로고침
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1000);
+                    } else {
+                        showError(data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('도시 삭제 중 오류가 발생했습니다.');
+                });
+            }
+            
+            // 성공 메시지 표시
+            function showSuccess(message) {
+                successToastMessage.textContent = message;
+                successToast.show();
+            }
+            
+            // 오류 메시지 표시
+            function showError(message) {
+                errorToastMessage.textContent = message;
+                errorToast.show();
+            }
+        });
+    </script>
+</body>
+</html> 
