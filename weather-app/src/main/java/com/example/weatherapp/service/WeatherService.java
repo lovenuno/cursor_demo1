@@ -22,7 +22,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+
+import jakarta.annotation.PostConstruct;
 
 @Service
 @RequiredArgsConstructor
@@ -39,15 +42,115 @@ public class WeatherService {
     private String apiKey;
 
     // 날씨 정보를 가져올 도시 목록 - CopyOnWriteArrayList로 변경하여 스레드 안전성 확보
-    private final List<String> cities = new CopyOnWriteArrayList<>(Arrays.asList("Seoul", "Tokyo", "New York", "London", "Paris"));
+    private final List<String> cities = new CopyOnWriteArrayList<>();
+    
+    // 도시 이름 검색을 위한 캐시 맵 (소문자 도시 이름 -> 원래 도시 이름)
+    private final Map<String, String> cityNameCache = new ConcurrentHashMap<>();
+    
+    // 도시 목록 로딩 상태
+    //private boolean citiesLoaded = false;
     
     // 현재 메모리에 저장된 날씨 데이터
     private List<WeatherData> weatherDataList = new ArrayList<>();
 
-    // 1분마다 날씨 데이터 업데이트
-    @Scheduled(fixedRate = 60000)
+    @PostConstruct
+    public void init() {
+        log.info("애플리케이션 시작: Supabase에서 도시 목록 비동기 로드 시작...");
+        
+        // 비동기적으로 도시 목록 로드
+        CompletableFuture.runAsync(this::loadCitiesFromSupabase)
+            .thenRun(() -> {
+                // 기본 도시가 없는 경우 초기 도시 추가
+                if (cities.isEmpty()) {
+                    log.info("Supabase에 도시 데이터가 없습니다. 기본 도시를 추가합니다.");
+                    List<String> defaultCities = Arrays.asList("Seoul", "Tokyo", "New York", "London", "Paris");
+                    cities.addAll(defaultCities);
+                    
+                    // 캐시 업데이트
+                    defaultCities.forEach(city -> cityNameCache.put(city.toLowerCase(), city));
+                }
+                
+                // 초기 날씨 데이터 로드
+                updateWeatherData();
+                
+                //citiesLoaded = true;
+                log.info("도시 목록 로딩 완료: {} 개의 도시", cities.size());
+            })
+            .exceptionally(ex -> {
+                log.error("도시 목록 비동기 로드 중 오류 발생: {}", ex.getMessage());
+                
+                // 오류 발생 시 기본 도시 추가
+                List<String> defaultCities = Arrays.asList("Seoul", "Tokyo", "New York", "London", "Paris");
+                cities.addAll(defaultCities);
+                
+                // 캐시 업데이트
+                defaultCities.forEach(city -> cityNameCache.put(city.toLowerCase(), city));
+                
+                // 초기 날씨 데이터 로드
+                updateWeatherData();
+                
+                //citiesLoaded = true;
+                return null;
+            });
+        
+        // 기본 도시로 시작하여 UI가 빠르게 로드되도록 함
+        List<String> defaultCities = Arrays.asList("Seoul", "Tokyo", "New York", "London", "Paris");
+        cities.addAll(defaultCities);
+        
+        // 캐시 초기화
+        defaultCities.forEach(city -> cityNameCache.put(city.toLowerCase(), city));
+    }
+
+    // Supabase에서 도시 목록 로드
+    private void loadCitiesFromSupabase() {
+        try {
+            log.info("Supabase에서 도시 목록 로드 시작");
+            
+            String response = supabaseWebClient
+                    .get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/rest/v1/weather_data")
+                            .queryParam("select", "city")
+                            .build())
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .doOnSubscribe(s -> log.info("Supabase 도시 목록 조회 요청 시작"))
+                    .block();
+            
+            if (response != null) {
+                log.info("Supabase 도시 목록 응답 수신");
+                JsonNode jsonResponse = objectMapper.readTree(response);
+                
+                Set<String> uniqueCities = new HashSet<>();
+                if (jsonResponse.isArray()) {
+                    for (JsonNode cityNode : jsonResponse) {
+                        String cityName = cityNode.path("city").asText();
+                        if (!cityName.isEmpty()) {
+                            uniqueCities.add(cityName);
+                        }
+                    }
+                }
+                
+                log.info("Supabase에서 {} 개의 고유 도시를 로드했습니다", uniqueCities.size());
+                
+                // 도시 목록 업데이트
+                cities.clear();
+                cities.addAll(uniqueCities);
+                
+                // 캐시 업데이트
+                cityNameCache.clear();
+                uniqueCities.forEach(city -> cityNameCache.put(city.toLowerCase(), city));
+            }
+        } catch (Exception e) {
+            log.error("Supabase 도시 목록 로드 중 예외 발생: {}", e.getMessage());
+            throw new RuntimeException("도시 목록 로드 실패", e);
+        }
+    }
+
+    // 10분마다 날씨 데이터 업데이트
+    @Scheduled(fixedRate = 600000)
     public void updateWeatherData() {
-        log.info("===== 날씨 데이터 업데이트 시작: {} =====", LocalDateTime.now());
+        log.info("===== 날씨 데이터 업데이트 시작: {} (10분 주기) =====", LocalDateTime.now());
         
         List<WeatherData> newWeatherDataList = new ArrayList<>();
         
@@ -255,6 +358,8 @@ public class WeatherService {
             
             // 유효한 도시이면 목록에 추가
             cities.add(cityName);
+            // 캐시에도 추가
+            cityNameCache.put(cityName.toLowerCase(), cityName);
             log.info("[{}] 도시가 성공적으로 추가되었습니다", cityName);
             
             // 추가된 도시의 날씨 데이터 즉시 가져오기
@@ -285,6 +390,8 @@ public class WeatherService {
         boolean removed = cities.remove(cityName);
         
         if (removed) {
+            // 캐시에서도 삭제
+            cityNameCache.remove(cityName.toLowerCase());
             log.info("[{}] 도시가 성공적으로 삭제되었습니다", cityName);
             
             // 메모리에 있는 날씨 데이터 목록에서도 삭제
@@ -306,12 +413,14 @@ public class WeatherService {
         String lowercaseQuery = query.toLowerCase();
         log.info("도시 검색: 검색어 '{}'", query);
         
-        // 1. 기존 등록된 도시 목록에서 검색
-        List<String> results = cities.stream()
-                .filter(city -> city.toLowerCase().startsWith(lowercaseQuery))
+        // 1. 캐시된 도시 이름에서 빠르게 검색
+        List<String> results = cityNameCache.entrySet().stream()
+                .filter(entry -> entry.getKey().startsWith(lowercaseQuery))
+                .map(Map.Entry::getValue)
+                .limit(5) // 최대 5개 결과로 제한
                 .collect(Collectors.toList());
         
-        log.info("기존 도시 목록에서 {} 개의 결과 발견", results.size());
+        log.info("캐시된 도시 목록에서 {} 개의 결과 발견", results.size());
         
         // 2. 결과가 적으면 (3개 미만) WeatherAPI.com에서 도시 유효성 확인
         if (results.size() < 3) {
@@ -338,6 +447,10 @@ public class WeatherService {
                             // 이미 결과에 있는지 확인하고, 없으면 추가
                             if (!results.contains(cityName) && !results.contains(fullName)) {
                                 results.add(fullName);
+                                
+                                // 캐시에도 추가 (검색 결과 재사용)
+                                cityNameCache.putIfAbsent(cityName.toLowerCase(), cityName);
+                                cityNameCache.putIfAbsent(fullName.toLowerCase(), fullName);
                             }
                         }
                     }
